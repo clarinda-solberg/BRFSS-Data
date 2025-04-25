@@ -1,0 +1,711 @@
+import pandas as pd
+import numpy as np
+
+def read_brfss_ascii_file(file_path, state_code='27'):
+    """
+    Read the BRFSS 2023 Combined Landline and Telephone Data ASCII file using pandas.
+    Filter for Minnesota data (state code = 27)
+    
+    Parameters:
+    file_path (str): Path to the ASCII file
+    state_code (str): State code (default: '27' for Minnesota)
+    
+    Returns:
+    pandas.DataFrame: DataFrame containing the Minnesota BRFSS data
+    """
+    # Define column specifications based on the variable layout
+    colspecs = []
+    names = []
+    
+    # Create a dictionary to map variables to their positions and lengths
+    col_specs_dict = {}
+    
+    # --- SECTION 1: CORE VARIABLES ---
+    core_vars = {
+        '_STATE': (0, 2),         # State identifier
+        'FMONTH': (16, 18),       # Month of interview
+        'IDATE': (18, 26),        # Interview date
+        'DISPCODE': (31, 35),     # Disposition code
+        'SEQNO': (35, 45),        # Sequence number
+        '_PSU': (35, 45)          # Primary sampling unit
+    }
+    col_specs_dict.update(core_vars)
+    
+    # --- SECTION 2: HEALTH STATUS VARIABLES ---
+    health_status_vars = {
+        'GENHLTH': (100, 101),    # General health status
+        'PHYSHLTH': (101, 103),   # Physical health not good days
+        'MENTHLTH': (103, 105),   # Mental health not good days
+        'POORHLTH': (105, 107)    # Poor physical or mental health days
+    }
+    col_specs_dict.update(health_status_vars)
+
+     # --- SECTION 3: HEALTHCARE ACCESS VARIABLES ---
+    healthcare_vars = {
+        'PRIMINS1': (107, 109),   # Health insurance type
+        'PERSDOC3': (109, 110),   # Personal doctor
+        'MEDCOST1': (110, 111),   # Cost prevented doctor visit
+        'CHECKUP1': (111, 112)    # Time since last checkup
+    }
+    col_specs_dict.update(healthcare_vars)
+    
+    # --- SECTION 4: EXERCISE/PHYSICAL ACTIVITY VARIABLES ---
+    exercise_vars = {
+        'EXERANY2': (112, 113),   # Exercise in past 30 days
+        'EXRACT12': (113, 115),   # Type of physical activity 1
+        'EXEROFT1': (115, 118),   # Frequency of activity 1
+        'EXERHMM1': (118, 121),   # Duration of activity 1
+        'EXRACT22': (121, 123),   # Type of physical activity 2
+        'EXEROFT2': (123, 126),   # Frequency of activity 2
+        'EXERHMM2': (126, 129),   # Duration of activity 2
+        'STRENGTH': (129, 132)    # Strength training frequency
+    }
+    col_specs_dict.update(exercise_vars)
+ 
+    # --- SECTION 5: CHRONIC HEALTH CONDITIONS ---
+    chronic_vars = {
+        'BPHIGH6': (132, 133),    # High blood pressure
+        'BPMEDS1': (133, 134),    # Taking blood pressure medication
+        'CHOLCHK3': (134, 135),   # Cholesterol check
+        'TOLDHI3': (135, 136),    # High cholesterol
+        'CHOLMED3': (136, 137),   # Taking cholesterol medication
+        'CVDINFR4': (137, 138),   # Heart attack
+        'CVDCRHD4': (138, 139),   # Coronary heart disease
+        'CVDSTRK3': (139, 140),   # Stroke
+        'ASTHMA3': (140, 141),    # Asthma
+        'ASTHNOW': (141, 142),    # Current asthma
+        'CHCSCNC1': (142, 143),   # Skin cancer
+        'CHCOCNC1': (143, 144),   # Other cancer
+        'CHCCOPD3': (144, 145),   # COPD
+        'ADDEPEV3': (145, 146),   # Depression
+        'CHCKDNY2': (146, 147),   # Kidney disease
+        'HAVARTH4': (147, 148),   # Arthritis
+        'DIABETE4': (148, 149),   # Diabetes
+        'DIABAGE4': (149, 151)    # Age at diabetes diagnosis
+    }
+    col_specs_dict.update(chronic_vars)
+
+    # --- SECTION 6: DEMOGRAPHICS ---
+    demographics_vars = {
+        'MARITAL': (185, 186),    # Marital status
+        'EDUCA': (186, 187),      # Education level
+        'RENTHOM1': (187, 188),   # Home ownership
+        'VETERAN3': (199, 200),   # Veteran status
+        'EMPLOY1': (200, 201),    # Employment status
+        'CHILDREN': (201, 203),   # Number of children
+        'INCOME3': (203, 205),    # Income level
+        'WEIGHT2': (206, 210),    # Weight in pounds
+        'HEIGHT3': (210, 214),    # Height in feet/inches
+        'SEXVAR': (87, 88)        # Sex
+    }
+    col_specs_dict.update(demographics_vars)
+    
+    # --- SECTION 7: RISK BEHAVIORS ---
+    risk_vars = {
+        'SMOKE100': (224, 225),   # Smoked 100 cigarettes
+        'SMOKDAY2': (225, 226),   # Current smoking frequency
+        'ALCDAY4': (228, 231),    # Alcohol consumption days
+        'AVEDRNK3': (231, 233),   # Average drinks per occasion
+        'DRNK3GE5': (233, 235),   # Binge drinking occasions
+    }
+    col_specs_dict.update(risk_vars)
+    
+    # --- SECTION 8: PREVENTIVE HEALTH ---
+    preventive_vars = {
+        'FLUSHOT7': (237, 238),   # Flu shot
+        'PNEUVAC4': (244, 245),   # Pneumonia vaccine
+        'HIVTST7': (246, 247),    # HIV test
+        'SEATBELT': (254, 255),   # Seatbelt use
+        'DRNKDRI2': (255, 257),   # Drinking and driving
+    }
+    col_specs_dict.update(preventive_vars)
+    
+    # --- SECTION 9: CALCULATED VARIABLES (ADDING ALL FROM DOCUMENTS) ---
+    calculated_vars = {
+        # Health status calculated variables
+        '_RFHLTH': (1896, 1897),      # Fair/poor health risk factor
+        '_PHYS14D': (1897, 1898),     # Physical health not good risk factor
+        '_MENT14D': (1898, 1899),     # Mental health not good risk factor
+        
+        # Healthcare access calculated variables
+        '_HLTHPL1': (1899, 1900),     # Health insurance coverage
+        '_HCVU653': (1900, 1901),     # Healthcare coverage for 18-64
+        
+        # Physical activity calculated variables
+        '_TOTINDA': (1901, 1902),     # No leisure time physical activity
+        'METVL12_': (1902, 1905),     # Activity MET value for first activity
+        'METVL22_': (1905, 1908),     # Activity MET value for second activity
+        'MAXVO21_': (1908, 1913),     # Estimated age-sex specific maximum oxygen consumption
+        'FC601_': (1913, 1918),       # Estimated functional capacity
+        'ACTIN13_': (1918, 1919),     # Estimated activity intensity for first activity
+        'ACTIN23_': (1919, 1920),     # Estimated activity intensity for second activity
+        'PADUR1_': (1920, 1923),      # Minutes of first activity
+        'PADUR2_': (1923, 1926),      # Minutes of second activity
+        'PAFREQ1_': (1926, 1931),     # Physical activity frequency per week for first activity
+        'PAFREQ2_': (1931, 1936),     # Physical activity frequency per week for second activity
+        '_MINAC12': (1936, 1941),     # Minutes of physical activity per week for first activity
+        '_MINAC22': (1941, 1946),     # Minutes of physical activity per week for second activity
+        'STRFREQ_': (1946, 1951),     # Strength activity frequency per week
+        'PAMISS3_': (1951, 1952),     # Missing physical activity data
+        'PAMIN13_': (1952, 1957),     # Minutes of physical activity per week for first activity
+        'PAMIN23_': (1957, 1962),     # Minutes of physical activity per week for second activity
+        'PA3MIN_': (1962, 1967),      # Minutes of total physical activity per week
+        'PAVIG13_': (1967, 1972),     # Minutes of vigorous physical activity per week for first activity
+        'PAVIG23_': (1972, 1977),     # Minutes of vigorous physical activity per week for second activity
+        'PA3VIGM_': (1977, 1982),     # Minutes of total vigorous physical activity per week
+        '_PACAT3': (1982, 1983),      # Physical activity categories
+        '_PAINDX3': (1983, 1984),     # Physical activity index
+        '_PA150R4': (1984, 1985),     # Meets aerobic 150 min recommendation
+        '_PA300R4': (1985, 1986),     # Meets aerobic 300 min recommendation
+        '_PA30023': (1986, 1987),     # 300+ minutes aerobic activity (2-levels)
+        '_PASTRNG': (1987, 1988),     # Meets strength training recommendation
+        '_PAREC3': (1988, 1989),      # Aerobic and strengthening guideline
+        '_PASTAE3': (1989, 1990),     # Aerobic and strengthening (2-level)
+
+        # Chronic disease calculated variables
+        '_RFHYPE6': (1990, 1991),     # High blood pressure risk factor
+        '_CHOLCH3': (1991, 1992),     # Cholesterol check within past five years
+        '_RFCHOL3': (1992, 1993),     # High cholesterol risk factor
+        '_MICHD': (1993, 1994),       # Heart disease/heart attack
+        '_LTASTH1': (1994, 1995),     # Lifetime asthma
+        '_CASTHM1': (1995, 1996),     # Current asthma
+        '_ASTHMS1': (1996, 1997),     # Computed asthma status
+        '_DRDXAR2': (1997, 1998),     # Doctor-diagnosed arthritis
+        
+        # Demographic calculated variables
+        '_MRACE1': (2054, 2056),      # Multiracial race categorization
+        '_HISPANC': (2058, 2059),     # Hispanic, Latino/a, or Spanish origin
+        '_RACE': (2059, 2060),        # Race/ethnicity categories
+        '_RACEG21': (2060, 2061),     # White non-Hispanic race group
+        '_RACEGR3': (2061, 2062),     # Five-level race/ethnicity category
+        '_RACEPRV': (2062, 2063),     # Race groups for internet prevalence tables
+        '_SEX': (2063, 2064),         # Sex calculated variable
+        '_AGEG5YR': (2064, 2066),     # 14-level age category
+        '_AGE65YR': (2066, 2067),     # Two-level age category
+        '_AGE80': (2067, 2069),       # Imputed age value collapsed above 80
+        '_AGE_G': (2069, 2070),       # Six-level imputed age category
+        'HTIN4': (2070, 2073),        # Height in inches
+        'HTM4': (2073, 2076),         # Height in meters
+        'WTKG3': (2076, 2081),        # Weight in kilograms
+        '_BMI5': (2081, 2085),        # Body Mass Index
+        '_BMI5CAT': (2085, 2086),     # BMI categories
+        '_RFBMI5': (2086, 2087),      # Overweight or obese
+        '_CHLDCNT': (2087, 2088),     # Number of children
+        '_EDUCAG': (2088, 2089),      # Education categories
+        '_INCOMG1': (2089, 2090),     # Income categories
+
+        # Risk behavior calculated variables
+        '_SMOKER3': (2090, 2091),     # Computed smoking status
+        '_RFSMOK3': (2091, 2092),     # Current smoking risk factor
+        '_CURECI2': (2092, 2093),     # Current e-cigarette user
+        'DRNKANY6': (2093, 2094),     # Any alcohol in past 30 days
+        'DROCDY4_': (2094, 2097),     # Drink-occasions-per-day
+        '_RFBING6': (2097, 2098),     # Binge drinking risk factor
+        '_DRNKWK2': (2098, 2103),     # Calculated total alcoholic beverages per week
+        '_RFDRHV8': (2103, 2104),     # Heavy drinking risk factor
+        
+        # Preventive health calculated variables
+        '_FLSHOT7': (2104, 2105),     # Flu shot past year (65+)
+        '_PNEUMO3': (2105, 2106),     # Ever had pneumonia shot (65+)
+        '_AIDTST4': (2106, 2107),     # Ever tested for HIV
+        
+        # Seatbelt and drinking/driving variables
+        '_RFSEAT2': (2107, 2108),     # Always or nearly always wear seat belts
+        '_RFSEAT3': (2108, 2109),     # Always wear seat belts
+        '_DRNKDRV': (2109, 2110),     # Drinking and driving
+        
+        # Additional location variables
+        '_METSTAT': (1401, 1402),     # Metropolitan status
+        '_URBSTAT': (1402, 1403),     # Urban/rural status
+    }
+    col_specs_dict.update(calculated_vars)
+
+    # Convert the dictionary to lists for pandas read_fwf
+    for key, value in col_specs_dict.items():
+        names.append(key)
+        colspecs.append(value)
+    
+    # Use pandas to read the fixed-width file
+    try:
+        df = pd.read_fwf(
+            file_path,
+            colspecs=colspecs,
+            names=names,
+            dtype=str  # Read all columns as strings initially
+        )
+        
+        # Filter for Minnesota (State code = 27)
+        minnesota_df = df[df['_STATE'] == state_code]
+        
+        print(f"Total records in file: {len(df)}")
+        print(f"Minnesota records found: {len(minnesota_df)}")
+        
+        return minnesota_df
+        
+    except FileNotFoundError:
+        print(f"Error: File '{file_path}' not found.")
+        return None
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        return None
+
+def clean_minnesota_brfss_data(df):
+    """
+    Clean and prepare Minnesota BRFSS data for analysis
+    
+    Parameters:
+    df (pandas.DataFrame): Raw Minnesota BRFSS dataframe
+    
+    Returns:
+    pandas.DataFrame: Cleaned Minnesota BRFSS dataframe
+    """
+    # Make a copy to avoid modifying the original
+    cleaned_df = df.copy()
+    
+    # 1. Filter for Complete Interviews Only
+    cleaned_df = cleaned_df[cleaned_df['DISPCODE'] == '1100']
+    
+    # 2. Convert Important Variables to Appropriate Types
+    # First, identify numeric columns to convert
+    numeric_cols = [
+        'PHYSHLTH', 'MENTHLTH', 'POORHLTH', 
+        '_BMI5', 'WTKG3', 'HTIN4', 'HTM4',
+        'CHILDREN', '_CHLDCNT', 'DIABAGE4'
+    ]
+    
+    for col in numeric_cols:
+        if col in cleaned_df.columns:
+            # Replace BRFSS missing value codes before conversion
+            cleaned_df[col] = cleaned_df[col].replace(['7', '9', '77', '99', '777', '999', '7777', '9999'], np.nan)
+            cleaned_df[col] = pd.to_numeric(cleaned_df[col], errors='coerce')
+    
+    # 3. Convert Categorical Variables with Meaningful Labels
+    
+    # General Health Status
+    if 'GENHLTH' in cleaned_df.columns:
+        genhlth_map = {
+            '1': 'Excellent',
+            '2': 'Very Good',
+            '3': 'Good', 
+            '4': 'Fair',
+            '5': 'Poor',
+            '7': 'Don\'t know/Not sure',
+            '9': 'Refused'
+        }
+        cleaned_df['GENHLTH'] = cleaned_df['GENHLTH'].map(genhlth_map)
+    
+    # Diabetes Status
+    if 'DIABETE4' in cleaned_df.columns:
+        diabetes_map = {
+            '1': 'Yes',
+            '2': 'Yes, but female told only during pregnancy',
+            '3': 'No',
+            '4': 'No, pre-diabetes or borderline diabetes',
+            '7': 'Don\'t know/Not sure',
+            '9': 'Refused'
+        }
+        cleaned_df['DIABETE4'] = cleaned_df['DIABETE4'].map(diabetes_map)
+    
+    # Sex Variable
+    if '_SEX' in cleaned_df.columns:
+        sex_map = {
+            '1': 'Male',
+            '2': 'Female'
+        }
+        cleaned_df['SEX'] = cleaned_df['_SEX'].map(sex_map)
+    
+    # Education Level
+    if '_EDUCAG' in cleaned_df.columns:
+        educa_map = {
+            '1': 'Did not graduate High School',
+            '2': 'Graduated High School',
+            '3': 'Attended College or Technical School',
+            '4': 'Graduated from College or Technical School',
+            '9': 'Don\'t know/Not sure/Missing'
+        }
+        cleaned_df['EDUCATION'] = cleaned_df['_EDUCAG'].map(educa_map)
+    
+    # Income Level
+    if '_INCOMG1' in cleaned_df.columns:
+        income_map = {
+            '1': 'Less than $15,000',
+            '2': '$15,000 to < $25,000',
+            '3': '$25,000 to < $35,000',
+            '4': '$35,000 to < $50,000',
+            '5': '$50,000 to < $100,000',
+            '6': '$100,000 to < $200,000',
+            '7': '$200,000 or more',
+            '9': 'Don\'t know/Not sure/Missing'
+        }
+        cleaned_df['INCOME'] = cleaned_df['_INCOMG1'].map(income_map)
+    
+    # BMI Categories
+    if '_BMI5CAT' in cleaned_df.columns:
+        bmi_map = {
+            '1': 'Underweight',
+            '2': 'Normal Weight',
+            '3': 'Overweight',
+            '4': 'Obese'
+        }
+        cleaned_df['BMI_CATEGORY'] = cleaned_df['_BMI5CAT'].map(bmi_map)
+    
+    # Smoking Status
+    if '_SMOKER3' in cleaned_df.columns:
+        smoker_map = {
+            '1': 'Current smoker - every day',
+            '2': 'Current smoker - some days',
+            '3': 'Former smoker',
+            '4': 'Never smoked',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['SMOKING_STATUS'] = cleaned_df['_SMOKER3'].map(smoker_map)
+    
+    # Physical Activity Categories
+    if '_PACAT3' in cleaned_df.columns:
+        pa_map = {
+            '1': 'Highly Active',
+            '2': 'Active',
+            '3': 'Insufficiently Active',
+            '4': 'Inactive',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['PHYSICAL_ACTIVITY'] = cleaned_df['_PACAT3'].map(pa_map)
+    
+    # Health Insurance Coverage
+    if '_HLTHPL1' in cleaned_df.columns:
+        ins_map = {
+            '1': 'Have insurance',
+            '2': 'No insurance',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['HEALTH_INSURANCE'] = cleaned_df['_HLTHPL1'].map(ins_map)
+    
+    # Age Groups
+    if '_AGE_G' in cleaned_df.columns:
+        age_map = {
+            '1': '18-24',
+            '2': '25-34',
+            '3': '35-44',
+            '4': '45-54',
+            '5': '55-64',
+            '6': '65+'
+        }
+        cleaned_df['AGE_GROUP'] = cleaned_df['_AGE_G'].map(age_map)
+    
+    # High Blood Pressure Status
+    if '_RFHYPE6' in cleaned_df.columns:
+        bp_map = {
+            '1': 'No',
+            '2': 'Yes',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['HIGH_BLOOD_PRESSURE'] = cleaned_df['_RFHYPE6'].map(bp_map)
+    
+    # High Cholesterol Status
+    if '_RFCHOL3' in cleaned_df.columns:
+        chol_map = {
+            '1': 'No',
+            '2': 'Yes',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['HIGH_CHOLESTEROL'] = cleaned_df['_RFCHOL3'].map(chol_map)
+    
+    # Heart Disease Status
+    if '_MICHD' in cleaned_df.columns:
+        heart_map = {
+            '1': 'Yes',
+            '2': 'No'
+        }
+        cleaned_df['HEART_DISEASE'] = cleaned_df['_MICHD'].map(heart_map)
+    
+    # Asthma Status
+    if '_ASTHMS1' in cleaned_df.columns:
+        asthma_map = {
+            '1': 'Current',
+            '2': 'Former',
+            '3': 'Never',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['ASTHMA_STATUS'] = cleaned_df['_ASTHMS1'].map(asthma_map)
+    
+    # Alcohol Consumption - Heavy Drinking
+    if '_RFDRHV8' in cleaned_df.columns:
+        heavy_drink_map = {
+            '1': 'No',
+            '2': 'Yes',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['HEAVY_DRINKER'] = cleaned_df['_RFDRHV8'].map(heavy_drink_map)
+    
+    # Alcohol Consumption - Binge Drinking
+    if '_RFBING6' in cleaned_df.columns:
+        binge_drink_map = {
+            '1': 'No',
+            '2': 'Yes',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['BINGE_DRINKER'] = cleaned_df['_RFBING6'].map(binge_drink_map)
+    
+    # Race/Ethnicity
+    if '_RACE' in cleaned_df.columns:
+        race_map = {
+            '1': 'White only, non-Hispanic',
+            '2': 'Black only, non-Hispanic',
+            '3': 'American Indian or Alaskan Native only, non-Hispanic',
+            '4': 'Asian only, non-Hispanic',
+            '5': 'Native Hawaiian or other Pacific Islander only, non-Hispanic',
+            '6': 'Other race only, non-Hispanic',
+            '7': 'Multiracial, non-Hispanic',
+            '8': 'Hispanic',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['RACE_ETHNICITY'] = cleaned_df['_RACE'].map(race_map)
+    
+    # Physical Activity Recommendation Adherence
+    if '_PA150R4' in cleaned_df.columns:
+        pa_rec_map = {
+            '1': 'Meets aerobic recommendations',
+            '2': 'Insufficient physical activity',
+            '3': 'No physical activity',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['MEETS_AEROBIC_REC'] = cleaned_df['_PA150R4'].map(pa_rec_map)
+    
+    # Strength Training 
+    if '_PASTRNG' in cleaned_df.columns:
+        strength_map = {
+            '1': 'Meets strength recommendations',
+            '2': 'Does not meet strength recommendations',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['MEETS_STRENGTH_REC'] = cleaned_df['_PASTRNG'].map(strength_map)
+    
+    # Metropolitan Status
+    if '_METSTAT' in cleaned_df.columns:
+        metro_map = {
+            '1': 'Metropolitan counties',
+            '2': 'Nonmetropolitan counties'
+        }
+        cleaned_df['METRO_STATUS'] = cleaned_df['_METSTAT'].map(metro_map)
+    
+    # Urban/Rural Status
+    if '_URBSTAT' in cleaned_df.columns:
+        urban_map = {
+            '1': 'Urban counties',
+            '2': 'Rural counties'
+        }
+        cleaned_df['URBAN_RURAL'] = cleaned_df['_URBSTAT'].map(urban_map)
+    
+    # Overweight or Obese
+    if '_RFBMI5' in cleaned_df.columns:
+        rfbmi_map = {
+            '1': 'Not overweight or obese',
+            '2': 'Overweight or obese',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['OVERWEIGHT_OBESE'] = cleaned_df['_RFBMI5'].map(rfbmi_map)
+    
+    # Current Smoker
+    if '_RFSMOK3' in cleaned_df.columns:
+        rfsmok_map = {
+            '1': 'No',
+            '2': 'Yes',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['CURRENT_SMOKER'] = cleaned_df['_RFSMOK3'].map(rfsmok_map)
+    
+    # Marital Status
+    if 'MARITAL' in cleaned_df.columns:
+        marital_map = {
+            '1': 'Married',
+            '2': 'Divorced',
+            '3': 'Widowed',
+            '4': 'Separated',
+            '5': 'Never married',
+            '6': 'Unmarried couple',
+            '9': 'Refused'
+        }
+        cleaned_df['MARITAL_STATUS'] = cleaned_df['MARITAL'].map(marital_map)
+    
+    # Employment Status
+    if 'EMPLOY1' in cleaned_df.columns:
+        employ_map = {
+            '1': 'Employed for wages',
+            '2': 'Self-employed',
+            '3': 'Out of work for 1 year or more',
+            '4': 'Out of work for less than 1 year',
+            '5': 'Homemaker',
+            '6': 'Student',
+            '7': 'Retired',
+            '8': 'Unable to work',
+            '9': 'Refused'
+        }
+        cleaned_df['EMPLOYMENT'] = cleaned_df['EMPLOY1'].map(employ_map)
+    
+    # Veteran Status
+    if 'VETERAN3' in cleaned_df.columns:
+        vet_map = {
+            '1': 'Yes',
+            '2': 'No',
+            '7': 'Don\'t know/Not sure',
+            '9': 'Refused'
+        }
+        cleaned_df['VETERAN'] = cleaned_df['VETERAN3'].map(vet_map)
+    
+    # Home Ownership
+    if 'RENTHOM1' in cleaned_df.columns:
+        home_map = {
+            '1': 'Own',
+            '2': 'Rent',
+            '3': 'Other arrangement',
+            '7': 'Don\'t know/Not sure',
+            '9': 'Refused'
+        }
+        cleaned_df['HOME_OWNERSHIP'] = cleaned_df['RENTHOM1'].map(home_map)
+    
+    # Flu Shot in Past Year (65+)
+    if '_FLSHOT7' in cleaned_df.columns:
+        flu_map = {
+            '1': 'Yes',
+            '2': 'No',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['FLU_SHOT_65PLUS'] = cleaned_df['_FLSHOT7'].map(flu_map)
+    
+    # Ever Had Pneumonia Shot (65+)
+    if '_PNEUMO3' in cleaned_df.columns:
+        pneumo_map = {
+            '1': 'Yes',
+            '2': 'No',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['PNEUMONIA_SHOT_65PLUS'] = cleaned_df['_PNEUMO3'].map(pneumo_map)
+    
+    # HIV Test
+    if '_AIDTST4' in cleaned_df.columns:
+        hiv_map = {
+            '1': 'Yes',
+            '2': 'No',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['HIV_TEST_EVER'] = cleaned_df['_AIDTST4'].map(hiv_map)
+    
+    # Seatbelt Use
+    if '_RFSEAT3' in cleaned_df.columns:
+        seat_map = {
+            '1': 'Always wear seat belt',
+            '2': 'Don\'t always wear seat belt',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['SEATBELT_USE'] = cleaned_df['_RFSEAT3'].map(seat_map)
+    
+    # Drinking and Driving
+    if '_DRNKDRV' in cleaned_df.columns:
+        drnkdrv_map = {
+            '1': 'Have driven after drinking too much',
+            '2': 'Have not driven after drinking too much',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        cleaned_df['DRINKING_AND_DRIVING'] = cleaned_df['_DRNKDRV'].map(drnkdrv_map)
+    
+    return cleaned_df
+
+def analyze_mn_health_data(df):
+    """
+    Generate basic summary statistics for Minnesota BRFSS data
+    
+    Parameters:
+    df (pandas.DataFrame): Cleaned Minnesota BRFSS dataframe
+    """
+    print("\n=== MINNESOTA HEALTH STATISTICS ===\n")
+    
+    # Sample size
+    print(f"Total respondents: {len(df)}")
+    
+    # Demographics
+    print("\n--- DEMOGRAPHICS ---")
+    if 'SEX' in df.columns:
+        print("\nGender Distribution:")
+        print(df['SEX'].value_counts(dropna=False))
+    
+    if 'AGE_GROUP' in df.columns:
+        print("\nAge Distribution:")
+        print(df['AGE_GROUP'].value_counts(dropna=False))
+    
+    if 'EDUCATION' in df.columns:
+        print("\nEducation Level:")
+        print(df['EDUCATION'].value_counts(dropna=False))
+    
+    # Health Status
+    print("\n--- HEALTH STATUS ---")
+    if 'GENHLTH' in df.columns:
+        print("\nGeneral Health Status:")
+        print(df['GENHLTH'].value_counts(dropna=False))
+    
+    if 'BMI_CATEGORY' in df.columns:
+        print("\nBMI Categories:")
+        print(df['BMI_CATEGORY'].value_counts(dropna=False))
+    
+    if '_BMI5' in df.columns:
+        print("\nBMI Statistics:")
+        print(df['_BMI5'].describe())
+    
+    # Chronic Conditions
+    print("\n--- CHRONIC CONDITIONS ---")
+    if 'DIABETE4' in df.columns:
+        print("\nDiabetes Status:")
+        print(df['DIABETE4'].value_counts(dropna=False))
+    
+    if '_MICHD' in df.columns:
+        michd_map = {
+            '1': 'Yes',
+            '2': 'No'
+        }
+        df['HEART_DISEASE'] = df['_MICHD'].map(michd_map)
+        print("\nCoronary Heart Disease or MI:")
+        print(df['HEART_DISEASE'].value_counts(dropna=False))
+    
+    if '_RFHYPE6' in df.columns:
+        rfhype_map = {
+            '1': 'No',
+            '2': 'Yes',
+            '9': 'Don\'t know/Refused/Missing'
+        }
+        df['HIGH_BP'] = df['_RFHYPE6'].map(rfhype_map)
+        print("\nHigh Blood Pressure:")
+        print(df['HIGH_BP'].value_counts(dropna=False))
+    
+    # Risk Behaviors
+    print("\n--- RISK BEHAVIORS ---")
+    if 'SMOKING_STATUS' in df.columns:
+        print("\nSmoking Status:")
+        print(df['SMOKING_STATUS'].value_counts(dropna=False))
+    
+    if 'BINGE_DRINKER' in df.columns:
+        print("\nBinge Drinking:")
+        print(df['BINGE_DRINKER'].value_counts(dropna=False))
+    
+    if 'PHYSICAL_ACTIVITY' in df.columns:
+        print("\nPhysical Activity Level:")
+        print(df['PHYSICAL_ACTIVITY'].value_counts(dropna=False))
+    
+    return
+
+# Example usage
+if __name__ == "__main__":
+    file_path = "/lakehouse/default/Files/LLCP2023.ASC"
+    
+    # Read and filter Minnesota data
+    minnesota_data = read_brfss_ascii_file(file_path, state_code='27')
+    
+    if minnesota_data is not None and not minnesota_data.empty:
+        # Clean the Minnesota data
+        clean_mn_data = clean_minnesota_brfss_data(minnesota_data)
+        
+        # Generate summary statistics
+        analyze_mn_health_data(clean_mn_data)
+        
+        # Save to CSV for easier manipulation if needed
+        clean_mn_data.to_csv("minnesota_brfss_2023_data.csv", index=False)
+        
+        print("\nData processing complete. Minnesota BRFSS data has been cleaned and analyzed.")
