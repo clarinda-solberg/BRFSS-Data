@@ -2,7 +2,7 @@
 Python code for Behavioral Risk Factor Surveillance System which is referenced in StriveTogether's A Racial and Ethnic Equity Systems Indicators.  BRFSS is often referenced because it measures mental health by asking about mentally unhealthy days in the past 30 days.
 
 # Overview
-This repository contains code for processing and analyzing Behavioral Risk Factor Surveillance System (BRFSS) data, with a focus on Minnesota state data. The code transforms raw BRFSS data into an analysis-ready format with human-readable categorical variables.
+This repository contains code for processing and analyzing Behavioral Risk Factor Surveillance System (BRFSS) data, with a focus on Minnesota state data. The code transforms raw BRFSS data into an analysis-ready format with human-readable categorical variables. The code is designed for a Microsoft Fabric environment, pulling data from a lakehouse for cleaning as part of a data pipeline for downstream analytics. 
 
 # Key Features
 Filters for complete interview responses
