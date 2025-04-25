@@ -40,3 +40,7 @@ numpy
 
 # Data Source
 This code is designed for the CDC's Behavioral Risk Factor Surveillance System (BRFSS) dataset, which is the nation's premier system of health-related telephone surveys collecting state data about U.S. residents regarding their health-related risk behaviors, chronic health conditions, and use of preventive services.
+
+# Resources 
+General - https://www.cdc.gov/brfss/data_documentation/index.htm
+2023 BRFSS Survey Data and Documentation - https://www.cdc.gov/brfss/annual_data/annual_2023.html 
